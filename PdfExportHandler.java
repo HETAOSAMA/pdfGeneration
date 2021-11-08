@@ -1,18 +1,24 @@
 
-
-
-
 import com.itextpdf.text.pdf.BaseFont;
 import com.microsoft.applicationinsights.core.dependencies.apachecommons.lang3.StringUtils;
+
 import freemarker.template.Configuration;
 import freemarker.template.Template;
-import org.springframework.scheduling.annotation.Async;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.springframework.util.ResourceUtils;
+import org.springframework.web.servlet.view.freemarker.FreeMarkerConfigurer;
 import org.xhtmlrenderer.pdf.ITextFontResolver;
 import org.xhtmlrenderer.pdf.ITextRenderer;
 
+import javax.annotation.PostConstruct;
 import javax.servlet.http.HttpServletResponse;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,14 +30,23 @@ import java.util.Map;
  * @Description: pdf 导出
  */
 
-
+@Slf4j
+@Component
 public class PdfExportHandler {
-
+    private static PdfExportHandler pdfExportHandler;
+    @Autowired
+    FreeMarkerConfigurer freeMarkerConfigurer;
     private static final String PDF_TYPE = "application/pdf";
     private static final String DEFAULT_ENCODING = "utf-8";
     private static final boolean DEFAULT_NOCACHE = true;
     private static final CharSequence HEADER_ENCODING = "utf-8";
     private static final CharSequence HEADER_NOCACHE = "no-cache";
+
+    @PostConstruct
+    public void init(){
+            pdfExportHandler = this;
+            pdfExportHandler.freeMarkerConfigurer = this.freeMarkerConfigurer;
+    }
 
     /**
      * 生成PDF文件流
@@ -49,17 +64,16 @@ public class PdfExportHandler {
             cfg.setEncoding(Locale.CHINA, "UTF-8");
             //设置编码
             cfg.setDefaultEncoding("UTF-8");
-            //设置模板路径
-            cfg.setDirectoryForTemplateLoading(ResourceUtils.getFile(ResourceUtils.CLASSPATH_URL_PREFIX+"static/templates"));
-            //获取模板
-            Template template = cfg.getTemplate(ftlName);
-            template.setEncoding("UTF-8");
 
+            //获取模板
+            Template template = pdfExportHandler.freeMarkerConfigurer.getConfiguration().getTemplate(ftlName);
+            template.setEncoding("UTF-8");
+            template.setLocale(Locale.CHINA);
+            template.setOutputEncoding("UTF-8");
             ITextRenderer iTextRenderer = new ITextRenderer();
             //设置字体
             ITextFontResolver fontResolver = iTextRenderer.getFontResolver();
-            fontResolver.addFont(ResourceUtils.getFile(ResourceUtils.CLASSPATH_URL_PREFIX+"static/templates/font/HarmonyOS Sans SC.ttf").getPath(),
-                    BaseFont.IDENTITY_H, BaseFont.NOT_EMBEDDED);
+            fontResolver.addFont(ResourceUtils.getFile("templates/font/HarmonyOS Sans SC.ttf").getPath(), BaseFont.IDENTITY_H, BaseFont.NOT_EMBEDDED);
 
             Writer writer = new StringWriter();
             //数据填充模板
@@ -69,7 +83,6 @@ public class PdfExportHandler {
             Map<String,Object> map = new HashMap<>();
             //模板遍历时的名称<#list dataList as item>
             map.put("dataList",dataList);
-
             template.process(map, writer);
 
             //设置输出文件内容及路径
@@ -80,12 +93,15 @@ public class PdfExportHandler {
 
             //生成PDF
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+
             iTextRenderer.createPDF(baos);
             baos.close();
             String message = "生成PDF线程名称---->"+Thread.currentThread().getName();
             System.out.println(message);
             return baos;
         } catch(Exception e) {
+            log.error(e.getMessage(),e);
             throw new Exception(e);
         }
     }
